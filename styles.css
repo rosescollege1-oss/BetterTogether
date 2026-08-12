@@ -213,33 +213,3 @@ input:focus,select:focus{border-color:var(--rose);box-shadow:0 0 0 3px rgba(231,
   .goal-actions{grid-column:2}.goal-manage-row>div:nth-child(2){grid-column:1;grid-row:1}
   .calendar-legend{justify-content:flex-start}
 }
-
-
-/* Shared sync */
-.sync-pill{border:1px solid var(--line);background:rgba(255,255,255,.82);color:var(--ink);border-radius:999px;padding:9px 13px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;box-shadow:0 8px 20px rgba(113,74,67,.08)}
-.sync-dot{width:9px;height:9px;border-radius:50%;background:#c9b8b4;box-shadow:0 0 0 3px rgba(201,184,180,.16)}
-.sync-pill.connected .sync-dot{background:#9ea46f;box-shadow:0 0 0 3px rgba(158,164,111,.16)}
-.sync-pill.syncing .sync-dot{background:var(--peach);animation:syncPulse 1s infinite alternate}
-.sync-pill.waiting .sync-dot{background:#d7a15f}
-.sync-pill.error .sync-dot{background:#b86760}
-@keyframes syncPulse{from{opacity:.45}to{opacity:1}}
-.sync-detail{padding:11px 12px;border-radius:14px;background:#fff5eb;border:1px solid var(--line);font-size:12px;color:var(--muted);margin-top:4px}
-
-/* Repeating calendar */
-.repeat-extra{padding:13px 14px 1px;background:rgba(255,255,255,.52);border:1px solid var(--line);border-radius:16px;margin:-5px 0 15px}
-.custom-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px}
-.custom-days label{margin:0!important;display:block!important;text-align:center}
-.custom-days input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
-.custom-days label{padding:9px 0;border:1px solid var(--line);border-radius:11px;background:#fffdfa;cursor:pointer;font-size:12px}
-.custom-days label:has(input:checked){background:var(--rose);color:#fff;border-color:var(--rose)}
-.optional-label{font-weight:500;color:var(--muted);font-size:11px}
-.scope-card{padding:13px 14px 2px;background:#fff3e8;border:1px solid rgba(231,151,150,.18);border-radius:16px;margin:0 0 15px}
-.scope-card label{margin-bottom:8px}
-.recur-mark{font-weight:900;margin-right:4px;color:#9f716c}
-.event-chip .recur-mark{font-size:9px}
-.calendar-day .more-events{font-size:9px;color:var(--muted);padding:2px 4px}
-
-@media (max-width:620px){
-  .sync-pill{padding:8px 10px}.sync-pill span:last-child{max-width:85px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .custom-days{gap:4px}.custom-days label{padding:8px 0}
-}

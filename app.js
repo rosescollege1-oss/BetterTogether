@@ -72,167 +72,7 @@ function loadData(){
   }
   return merged;
 }
-function persistLocal(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); }
-
-const BACKEND_URL_KEY="betterTogether.backendUrl";
-const ACCESS_CODE_KEY="betterTogether.accessCode";
-const CLIENT_ID_KEY="betterTogether.clientId";
-const PENDING_KEY="betterTogether.pendingMutations";
-let backendUrl=localStorage.getItem(BACKEND_URL_KEY)||"";
-let accessCode=localStorage.getItem(ACCESS_CODE_KEY)||"";
-let clientId=localStorage.getItem(CLIENT_ID_KEY)||uid("client");
-localStorage.setItem(CLIENT_ID_KEY,clientId);
-let pendingMutations=[];
-try{ pendingMutations=JSON.parse(localStorage.getItem(PENDING_KEY)||"[]"); }catch{ pendingMutations=[]; }
-let bridgeFrame=null, bridgeReady=false, bridgeBooting=false, syncBusy=false, syncPollTimer=null, lastSyncAt=null;
-const bridgeRequests=new Map();
-
-function normalizeSharedState(incoming){
-  const loaded=incoming||{};
-  const merged={
-    ...clone(defaultData),...loaded,
-    people:{
-      rose:{...clone(defaultData.people.rose),...(loaded.people?.rose||{})},
-      adrian:{...clone(defaultData.people.adrian),...(loaded.people?.adrian||{})}
-    },
-    events:loaded.events||[],
-    meta:{...(loaded.meta||{})}
-  };
-  ["rose","adrian"].forEach(person=>{
-    merged.people[person].goals=(merged.people[person].goals||[]).map(g=>({active:true,...g}));
-    merged.people[person].checkins=merged.people[person].checkins||{};
-    merged.people[person].moods=merged.people[person].moods||{};
-    merged.people[person].todos=merged.people[person].todos||{};
-  });
-  const wake=merged.people.rose.goals.find(g=>g.id==="wake8");
-  if(wake){
-    wake.input="checkbox"; wake.weekdayOnly=true; wake.type="days_per_week"; wake.target=5; wake.active=wake.active!==false;
-    Object.values(merged.people.rose.checkins||{}).forEach(c=>{ if(typeof c.wake8==="string") c.wake8=c.wake8!==""&&c.wake8<="08:00"; });
-  }
-  merged.events=merged.events.map(ev=>({exceptions:[],overrides:{},...ev,recurrence:ev.recurrence||null}));
-  return merged;
-}
-
-function savePending(){ localStorage.setItem(PENDING_KEY,JSON.stringify(pendingMutations)); }
-function setSyncStatus(mode,text){
-  const btn=document.getElementById("syncStatusBtn"), label=document.getElementById("syncStatusText"), detail=document.getElementById("syncDetail");
-  if(!btn||!label) return;
-  btn.className=`sync-pill ${mode}`; label.textContent=text;
-  if(detail){
-    if(mode==="connected") detail.textContent=`Connected${lastSyncAt?` · last synced ${lastSyncAt.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}`:""}${pendingMutations.length?` · ${pendingMutations.length} waiting`:""}.`;
-    else if(mode==="syncing") detail.textContent="Syncing this phone with the shared copy…";
-    else if(mode==="waiting") detail.textContent=`Saved on this phone. ${pendingMutations.length||1} change${pendingMutations.length===1?" is":"s are"} waiting to sync.`;
-    else if(mode==="error") detail.textContent="Could not reach the shared copy. Your changes are still saved on this phone.";
-    else detail.textContent="Not connected yet. This phone is saving locally only.";
-  }
-}
-function queueMutation(mutation){
-  if(!mutation) return;
-  pendingMutations.push({id:uid("mut"),createdAt:new Date().toISOString(),...mutation});
-  savePending();
-}
-function saveData(mutation=null){
-  persistLocal();
-  if(mutation) queueMutation(mutation);
-  renderAll();
-  if(mutation && backendUrl && accessCode){ flushPendingMutations(); }
-  else if(mutation && (!backendUrl||!accessCode)) setSyncStatus("local","Local only");
-}
-function adoptSharedState(state){
-  data=normalizeSharedState(state);
-  persistLocal(); lastSyncAt=new Date(); renderAll(); setSyncStatus("connected",pendingMutations.length?"Sync pending":"Shared ✓");
-}
-
-function teardownBridge(){
-  bridgeReady=false; bridgeBooting=false;
-  if(bridgeFrame){ bridgeFrame.remove(); bridgeFrame=null; }
-  bridgeRequests.forEach(({reject,timer})=>{clearTimeout(timer);reject(new Error("Sync connection reset"));});
-  bridgeRequests.clear();
-}
-function backendBridgeUrl(){
-  if(!backendUrl) return "";
-  try{ const u=new URL(backendUrl); u.searchParams.set("mode","bridge"); u.searchParams.set("v",String(Date.now())); return u.toString(); }
-  catch{ return ""; }
-}
-function configureBridge(){
-  teardownBridge();
-  if(!backendUrl||!accessCode){ setSyncStatus("local","Local only"); return; }
-  const srcUrl=backendBridgeUrl();
-  if(!srcUrl){ setSyncStatus("error","Setup needed"); return; }
-  bridgeBooting=true; setSyncStatus("syncing","Connecting…");
-  bridgeFrame=document.createElement("iframe"); bridgeFrame.style.display="none"; bridgeFrame.setAttribute("aria-hidden","true"); bridgeFrame.src=srcUrl; document.body.appendChild(bridgeFrame);
-  setTimeout(()=>{ if(!bridgeReady&&bridgeBooting){ bridgeBooting=false; setSyncStatus("error","Sync offline"); } },12000);
-}
-window.addEventListener("message",e=>{
-  const msg=e.data;
-  if(!msg||msg.btBridge!==1) return;
-  if(msg.type==="ready" && bridgeFrame && e.source===bridgeFrame.contentWindow){
-    bridgeReady=true; bridgeBooting=false; bootstrapShared(); return;
-  }
-  if(!msg.id||!bridgeRequests.has(msg.id)) return;
-  const req=bridgeRequests.get(msg.id); bridgeRequests.delete(msg.id); clearTimeout(req.timer);
-  if(msg.ok) req.resolve(msg.result); else req.reject(new Error(msg.error||"Shared sync failed"));
-});
-function bridgeCall(method,args=[]){
-  return new Promise((resolve,reject)=>{
-    if(!bridgeReady||!bridgeFrame?.contentWindow){ reject(new Error("Shared sync is not connected")); return; }
-    const id=uid("rpc");
-    const timer=setTimeout(()=>{ bridgeRequests.delete(id); reject(new Error("Shared sync timed out")); },15000);
-    bridgeRequests.set(id,{resolve,reject,timer});
-    bridgeFrame.contentWindow.postMessage({btBridge:1,id,method,args,accessCode},"*");
-  });
-}
-async function bootstrapShared(){
-  if(syncBusy||!bridgeReady) return;
-  syncBusy=true; setSyncStatus("syncing","Syncing…");
-  try{
-    const result=await bridgeCall("bootstrapShared",[data,clientId]);
-    if(result?.state) adoptSharedState(result.state);
-    startSyncPolling();
-  }catch(err){ console.warn(err); setSyncStatus("error","Sync offline"); }
-  finally{ syncBusy=false; }
-  if(pendingMutations.length) flushPendingMutations();
-}
-async function flushPendingMutations(){
-  if(syncBusy||!bridgeReady||!pendingMutations.length) return;
-  syncBusy=true; setSyncStatus("syncing","Syncing…");
-  try{
-    while(pendingMutations.length){
-      const mut=pendingMutations[0];
-      const result=await bridgeCall("applyMutation",[mut,clientId]);
-      pendingMutations.shift(); savePending();
-      if(result?.state){ data=normalizeSharedState(result.state); persistLocal(); }
-    }
-    lastSyncAt=new Date(); renderAll(); setSyncStatus("connected","Shared ✓");
-  }catch(err){ console.warn(err); setSyncStatus(navigator.onLine?"error":"waiting",navigator.onLine?"Sync offline":"Waiting to sync"); }
-  finally{ syncBusy=false; }
-}
-async function pullSharedState(){
-  if(syncBusy||!bridgeReady||pendingMutations.length) return;
-  syncBusy=true;
-  try{
-    const rev=Number(data.meta?.revision||0);
-    const result=await bridgeCall("getState",[rev]);
-    if(result?.state) adoptSharedState(result.state);
-    else { lastSyncAt=new Date(); setSyncStatus("connected","Shared ✓"); }
-  }catch(err){ console.warn(err); setSyncStatus(navigator.onLine?"error":"waiting",navigator.onLine?"Sync offline":"Waiting to sync"); }
-  finally{ syncBusy=false; }
-}
-function startSyncPolling(){
-  if(syncPollTimer) clearInterval(syncPollTimer);
-  syncPollTimer=setInterval(()=>{ if(document.visibilityState==="visible"){ pendingMutations.length?flushPendingMutations():pullSharedState(); } },12000);
-}
-function initSharedSync(){
-  document.getElementById("backendUrlInput").value=backendUrl;
-  document.getElementById("accessCodeInput").value=accessCode;
-  document.getElementById("disconnectSyncBtn").classList.toggle("hidden",!backendUrl);
-  if(backendUrl&&accessCode) configureBridge(); else setSyncStatus("local","Local only");
-}
-document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&bridgeReady){ pendingMutations.length?flushPendingMutations():pullSharedState(); } });
-window.addEventListener("focus",()=>{ if(bridgeReady){ pendingMutations.length?flushPendingMutations():pullSharedState(); } });
-window.addEventListener("online",()=>{ if(backendUrl&&accessCode){ bridgeReady?flushPendingMutations():configureBridge(); } });
-window.addEventListener("offline",()=>{ if(backendUrl) setSyncStatus("waiting","Waiting to sync"); });
-
+function saveData(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); renderAll(); }
 
 function setPage(page){
   document.querySelectorAll(".page").forEach(el=>el.classList.toggle("active",el.id===page));
@@ -348,8 +188,8 @@ function buildTodoRows(person,date,listEl,percentEl){
     row.innerHTML='<input class="todo-check" type="checkbox" aria-label="Complete task"><span class="todo-text"></span><button class="delete-btn" aria-label="Delete task">×</button>';
     const check=row.querySelector(".todo-check"); check.checked=!!task.done;
     row.querySelector(".todo-text").textContent=task.text;
-    check.addEventListener("change",()=>{ task.done=check.checked; saveData({type:"todo.upsert",payload:{person,date,task:clone(task)}}); });
-    row.querySelector(".delete-btn").addEventListener("click",()=>{ data.people[person].todos[date]=list.filter(x=>x.id!==task.id); saveData({type:"todo.delete",payload:{person,date,taskId:task.id}}); });
+    check.addEventListener("change",()=>{ task.done=check.checked; saveData(); });
+    row.querySelector(".delete-btn").addEventListener("click",()=>{ data.people[person].todos[date]=list.filter(x=>x.id!==task.id); saveData(); });
     listEl.appendChild(row);
   });
   percentEl.textContent=`${todoPercent(person,date)}%`;
@@ -360,7 +200,7 @@ function renderPersonTodos(person){
   buildTodoRows(person,date,document.getElementById(`${person}TodoPageList`),document.getElementById(`${person}TodoPagePercent`));
   document.getElementById(`${person}TodoPageHeading`).textContent=date===todayKey()?"Today":fmtDate(date,{weekday:"short",month:"short",day:"numeric"});
 }
-function addTodo(person,date,text){ text=text.trim(); if(!text) return; const task={id:uid("todo"),text,done:false}; ensureTodos(person,date).push(task); saveData({type:"todo.upsert",payload:{person,date,task:clone(task)}}); }
+function addTodo(person,date,text){ text=text.trim(); if(!text) return; ensureTodos(person,date).push({id:uid("todo"),text,done:false}); saveData(); }
 
 document.getElementById("roseTodoForm").addEventListener("submit",e=>{ e.preventDefault(); const i=document.getElementById("roseTodoInput"); addTodo("rose",todayKey(),i.value); i.value=""; });
 document.getElementById("adrianTodoForm").addEventListener("submit",e=>{ e.preventDefault(); const i=document.getElementById("adrianTodoInput"); addTodo("adrian",todayKey(),i.value); i.value=""; });
@@ -378,7 +218,7 @@ function renderMood(person,elId,date=todayKey()){
     b.title=["Rough","Meh","Okay","Good","Great"][i-1];
     b.addEventListener("mouseenter",()=>paint(i));
     b.addEventListener("focus",()=>paint(i));
-    b.addEventListener("click",()=>{ data.people[person].moods[date]=i; saveData({type:"mood.set",payload:{person,date,value:i}}); });
+    b.addEventListener("click",()=>{ data.people[person].moods[date]=i; saveData(); });
     buttons.push(b); wrap.appendChild(b);
   }
   wrap.addEventListener("mouseleave",()=>paint(selected));
@@ -430,11 +270,11 @@ function renderCheckin(person){
       label.textContent=goal.id==="wake8"?"Up by 8?":"Done today";
       const inp=document.createElement("input"); inp.type="checkbox"; inp.className="big-checkbox"; inp.checked=!!c[goal.id];
       inp.setAttribute("aria-label",`${goal.name} ${fmtDate(date)}`);
-      inp.addEventListener("change",()=>{ c[goal.id]=inp.checked; saveData({type:"checkin.set",payload:{person,date,goalId:goal.id,value:inp.checked}}); }); slot.appendChild(inp);
+      inp.addEventListener("change",()=>{ c[goal.id]=inp.checked; saveData(); }); slot.appendChild(inp);
     }else{
       label.textContent=goal.unit?`Enter ${goal.unit}`:"Enter amount";
       const inp=document.createElement("input"); inp.type="number"; inp.min="0"; inp.step="0.01"; inp.className="number-entry"; inp.value=c[goal.id]??"";
-      inp.addEventListener("change",()=>{ c[goal.id]=inp.value===""?undefined:Number(inp.value); saveData({type:"checkin.set",payload:{person,date,goalId:goal.id,value:c[goal.id]??null}}); }); slot.appendChild(inp);
+      inp.addEventListener("change",()=>{ c[goal.id]=inp.value===""?undefined:Number(inp.value); saveData(); }); slot.appendChild(inp);
     }
     el.appendChild(card);
   });
@@ -461,7 +301,7 @@ function renderGoalOverview(person){
 function moveGoal(person,fromIndex,toIndex){
   const goals=data.people[person].goals;
   if(fromIndex<0||toIndex<0||fromIndex>=goals.length||toIndex>=goals.length||fromIndex===toIndex) return;
-  const [item]=goals.splice(fromIndex,1); goals.splice(toIndex,0,item); saveData({type:"goal.reorder",payload:{person,ids:goals.map(g=>g.id)}});
+  const [item]=goals.splice(fromIndex,1); goals.splice(toIndex,0,item); saveData();
 }
 function renderGoalManager(person){
   const wrap=document.getElementById(`${person}GoalManager`); wrap.innerHTML="";
@@ -474,8 +314,8 @@ function renderGoalManager(person){
     row.querySelector(".goal-name").textContent=goal.name;
     row.querySelector(".goal-sub").innerHTML=`${trackingLabel(goal)}${goal.active===false?'<span class="pause-badge">Paused</span>':""}`;
     const pause=row.querySelector(".pause-goal"); pause.textContent=goal.active===false?"Resume":"Pause";
-    pause.addEventListener("click",()=>{ goal.active=goal.active===false; saveData({type:"goal.upsert",payload:{person,goal:clone(goal)}}); });
-    row.querySelector(".delete-btn").addEventListener("click",()=>{ if(confirm(`Delete "${goal.name}"?`)){ data.people[person].goals=goals.filter(g=>g.id!==goal.id); saveData({type:"goal.delete",payload:{person,goalId:goal.id}}); } });
+    pause.addEventListener("click",()=>{ goal.active=goal.active===false; saveData(); });
+    row.querySelector(".delete-btn").addEventListener("click",()=>{ if(confirm(`Delete "${goal.name}"?`)){ data.people[person].goals=goals.filter(g=>g.id!==goal.id); saveData(); } });
     row.querySelector(".move-up").disabled=index===0; row.querySelector(".move-down").disabled=index===goals.length-1;
     row.querySelector(".move-up").addEventListener("click",()=>moveGoal(person,index,index-1));
     row.querySelector(".move-down").addEventListener("click",()=>moveGoal(person,index,index+1));
@@ -513,107 +353,38 @@ document.getElementById("goalType").addEventListener("change",updateTargetHint);
 document.getElementById("goalForm").addEventListener("submit",e=>{
   e.preventDefault(); const person=document.getElementById("goalPerson").value, type=document.getElementById("goalType").value;
   const goal={id:uid("goal"),name:document.getElementById("goalName").value.trim(),type,target:Number(document.getElementById("goalTarget").value||0),input:(type==="daily_checkbox"||type==="days_per_week")?"checkbox":"number",active:true};
-  data.people[person].goals.push(goal); goalDialog.close(); saveData({type:"goal.upsert",payload:{person,goal:clone(goal)}});
+  data.people[person].goals.push(goal); goalDialog.close(); saveData();
 });
 document.querySelectorAll("[data-close]").forEach(btn=>btn.addEventListener("click",()=>document.getElementById(btn.dataset.close).close()));
 
 const eventDialog=document.getElementById("eventDialog");
-const repeatSelect=document.getElementById("eventRepeat");
-function updateRepeatUI(){
-  const val=repeatSelect.value;
-  document.getElementById("repeatExtra").classList.toggle("hidden",val==="none");
-  document.getElementById("customDays").classList.toggle("hidden",val!=="custom");
-}
-repeatSelect.addEventListener("change",updateRepeatUI);
-document.getElementById("eventEditScope").addEventListener("change",updateEditScopeUI);
-function updateEditScopeUI(){
-  const repeating=!document.getElementById("eventEditScopeWrap").classList.contains("hidden");
-  const scope=document.getElementById("eventEditScope").value;
-  const occurrenceOnly=repeating&&scope==="occurrence";
-  document.getElementById("eventRecurrenceFields").classList.toggle("hidden",occurrenceOnly);
-  document.getElementById("eventDate").disabled=occurrenceOnly;
-  document.getElementById("eventScopeHint").textContent=occurrenceOnly?"This changes only this date. To move it to another day, delete this occurrence and add a one-time event.":"Changes will update every occurrence in this series.";
-}
-function setCustomDays(days=[]){
-  document.querySelectorAll("#customDays input").forEach(inp=>inp.checked=days.map(Number).includes(Number(inp.value)));
-}
-function getCustomDays(){ return [...document.querySelectorAll("#customDays input:checked")].map(x=>Number(x.value)); }
-function recurrenceFromForm(){
-  const type=repeatSelect.value;
-  if(type==="none") return null;
-  const recurrence={type,until:document.getElementById("eventRepeatUntil").value||""};
-  if(type==="custom") recurrence.days=getCustomDays();
-  return recurrence;
-}
-function populateRecurrence(recurrence){
-  repeatSelect.value=recurrence?.type||"none";
-  document.getElementById("eventRepeatUntil").value=recurrence?.until||"";
-  setCustomDays(recurrence?.days||[]); updateRepeatUI();
-}
-function baseEventById(id){ return data.events.find(e=>e.id===id); }
 function openAddEvent(date=todayKey()){
-  document.getElementById("eventId").value=""; document.getElementById("eventOccurrenceDate").value="";
-  document.getElementById("eventDialogTitle").textContent="Add something"; document.getElementById("eventSubmitBtn").textContent="Add to calendar";
-  document.getElementById("deleteEventInModal").classList.add("hidden"); document.getElementById("eventEditScopeWrap").classList.add("hidden");
-  document.getElementById("eventRecurrenceFields").classList.remove("hidden"); document.getElementById("eventDate").disabled=false;
+  document.getElementById("eventId").value=""; document.getElementById("eventDialogTitle").textContent="Add something"; document.getElementById("eventSubmitBtn").textContent="Add to calendar";
+  document.getElementById("deleteEventInModal").classList.add("hidden");
   document.getElementById("eventTitle").value=""; document.getElementById("eventPerson").value="rose"; document.getElementById("eventDate").value=date; document.getElementById("eventStart").value="18:00"; document.getElementById("eventEnd").value="19:00";
-  populateRecurrence(null); eventDialog.showModal();
+  eventDialog.showModal();
 }
-function openEditOccurrence(occ){
-  const base=baseEventById(occ.seriesId||occ.id); if(!base) return;
-  document.getElementById("eventId").value=base.id; document.getElementById("eventOccurrenceDate").value=occ.occurrenceDate||occ.date;
-  document.getElementById("eventDialogTitle").textContent=occ.isRecurring?"Edit repeating plan":"Edit plan"; document.getElementById("eventSubmitBtn").textContent="Save changes";
+function openEditEvent(id){
+  const ev=data.events.find(e=>e.id===id); if(!ev) return;
+  document.getElementById("eventId").value=ev.id; document.getElementById("eventDialogTitle").textContent="Edit plan"; document.getElementById("eventSubmitBtn").textContent="Save changes";
   document.getElementById("deleteEventInModal").classList.remove("hidden");
-  document.getElementById("eventTitle").value=occ.title; document.getElementById("eventPerson").value=occ.person; document.getElementById("eventDate").value=occ.date; document.getElementById("eventStart").value=occ.start; document.getElementById("eventEnd").value=occ.end;
-  populateRecurrence(base.recurrence);
-  document.getElementById("eventEditScopeWrap").classList.toggle("hidden",!occ.isRecurring);
-  document.getElementById("eventEditScope").value=occ.isRecurring?"occurrence":"series";
-  document.getElementById("eventRecurrenceFields").classList.toggle("hidden",occ.isRecurring);
-  document.getElementById("eventDate").disabled=occ.isRecurring;
-  updateEditScopeUI(); eventDialog.showModal();
+  document.getElementById("eventTitle").value=ev.title; document.getElementById("eventPerson").value=ev.person; document.getElementById("eventDate").value=ev.date; document.getElementById("eventStart").value=ev.start; document.getElementById("eventEnd").value=ev.end;
+  eventDialog.showModal();
 }
-function deleteOpenedEvent(){
-  const id=document.getElementById("eventId").value, base=baseEventById(id); if(!base) return;
-  const occurrenceDate=document.getElementById("eventOccurrenceDate").value;
-  const repeating=!!base.recurrence&&!!occurrenceDate;
-  const scope=repeating?document.getElementById("eventEditScope").value:"series";
-  if(scope==="occurrence"){
-    if(!confirm(`Delete just this occurrence of "${base.title}"?`)) return;
-    base.exceptions=Array.from(new Set([...(base.exceptions||[]),occurrenceDate]));
-    if(base.overrides) delete base.overrides[occurrenceDate];
-    eventDialog.close(); saveData({type:"event.exception",payload:{seriesId:base.id,date:occurrenceDate}});
-  }else{
-    if(!confirm(`Delete ${base.recurrence?"the entire repeating series":"\""+base.title+"\""}?`)) return;
-    data.events=data.events.filter(e=>e.id!==base.id); eventDialog.close(); saveData({type:"event.delete",payload:{eventId:base.id}});
-  }
+function deleteEvent(id){
+  const ev=data.events.find(e=>e.id===id); if(!ev) return;
+  if(confirm(`Delete "${ev.title}"?`)){ data.events=data.events.filter(e=>e.id!==id); if(eventDialog.open) eventDialog.close(); saveData(); }
 }
 document.getElementById("addEventBtn").addEventListener("click",()=>openAddEvent());
-document.getElementById("deleteEventInModal").addEventListener("click",deleteOpenedEvent);
+document.getElementById("deleteEventInModal").addEventListener("click",()=>deleteEvent(document.getElementById("eventId").value));
 document.getElementById("eventForm").addEventListener("submit",e=>{
-  e.preventDefault();
-  const start=document.getElementById("eventStart").value,end=document.getElementById("eventEnd").value;
+  e.preventDefault(); const start=document.getElementById("eventStart").value,end=document.getElementById("eventEnd").value;
   if(end<=start){ alert("End time needs to be after start time."); return; }
-  if(repeatSelect.value==="custom"&&!getCustomDays().length){ alert("Choose at least one day for the custom repeat."); return; }
+  const payload={title:document.getElementById("eventTitle").value.trim(),person:document.getElementById("eventPerson").value,date:document.getElementById("eventDate").value,start,end};
   const id=document.getElementById("eventId").value;
-  const occurrenceDate=document.getElementById("eventOccurrenceDate").value;
-  const existing=id?baseEventById(id):null;
-  const isRecurringEdit=!!existing?.recurrence&&!!occurrenceDate;
-  const scope=isRecurringEdit?document.getElementById("eventEditScope").value:"series";
-  const values={title:document.getElementById("eventTitle").value.trim(),person:document.getElementById("eventPerson").value,date:document.getElementById("eventDate").value,start,end};
-  if(isRecurringEdit&&scope==="occurrence"){
-    existing.overrides=existing.overrides||{};
-    existing.overrides[occurrenceDate]={title:values.title,person:values.person,start:values.start,end:values.end};
-    existing.exceptions=(existing.exceptions||[]).filter(d=>d!==occurrenceDate);
-    eventDialog.close(); saveData({type:"event.override",payload:{seriesId:existing.id,date:occurrenceDate,changes:clone(existing.overrides[occurrenceDate])}}); return;
-  }
-  const recurrence=recurrenceFromForm();
-  if(existing){
-    Object.assign(existing,values,{recurrence,exceptions:existing.exceptions||[],overrides:existing.overrides||{}});
-    eventDialog.close(); saveData({type:"event.upsert",payload:{event:clone(existing)}});
-  }else{
-    const ev={id:uid("event"),...values,recurrence,exceptions:[],overrides:{}};
-    data.events.push(ev); eventDialog.close(); saveData({type:"event.upsert",payload:{event:clone(ev)}});
-  }
+  if(id){ const ev=data.events.find(x=>x.id===id); if(ev) Object.assign(ev,payload); }
+  else data.events.push({id:uid("event"),...payload});
+  data.events.sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)); eventDialog.close(); saveData();
 });
 
 document.getElementById("prevMonth").addEventListener("click",()=>{ calendarCursor.setMonth(calendarCursor.getMonth()-1); renderCalendar(); });
@@ -623,39 +394,13 @@ function mins(t){ const [h,m]=t.split(":").map(Number); return h*60+m; }
 function timeStr(min){ const h=Math.floor(min/60),m=min%60; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`; }
 function prettyTime(t){ const [h,m]=t.split(":").map(Number),ap=h>=12?"PM":"AM",hh=((h+11)%12)+1; return `${hh}:${String(m).padStart(2,"0")} ${ap}`; }
 function roundUp15(min){ return Math.ceil(min/15)*15; }
-function addDaysKey(key,n){ const d=parseLocalDate(key); d.setDate(d.getDate()+n); return todayKey(d); }
-function recurrenceMatches(ev,date){
-  if(!ev.recurrence) return date===ev.date;
-  if(date<ev.date) return false;
-  if(ev.recurrence.until&&date>ev.recurrence.until) return false;
-  const dt=parseLocalDate(date), day=dt.getDay(), type=ev.recurrence.type;
-  if(type==="daily") return true;
-  if(type==="weekdays") return day>=1&&day<=5;
-  if(type==="weekly") return day===parseLocalDate(ev.date).getDay();
-  if(type==="custom") return (ev.recurrence.days||[]).map(Number).includes(day);
-  return false;
+function personBusyOn(person,date){ return data.events.filter(e=>e.date===date&&(e.person===person||e.person==="both")).map(e=>[mins(e.start),mins(e.end)]).sort((a,b)=>a[0]-b[0]); }
+function merged(intervals){
+  const out=[]; intervals.forEach(i=>{ if(!out.length||i[0]>out[out.length-1][1]) out.push([...i]); else out[out.length-1][1]=Math.max(out[out.length-1][1],i[1]); }); return out;
 }
-function occurrencesBetween(startDate,endDate){
-  const out=[];
-  data.events.forEach(ev=>{
-    if(!ev.recurrence){ if(ev.date>=startDate&&ev.date<=endDate) out.push({...ev,seriesId:ev.id,occurrenceDate:ev.date,isRecurring:false}); return; }
-    const loopStart=ev.date>startDate?ev.date:startDate;
-    for(let key=loopStart;key<=endDate;key=addDaysKey(key,1)){
-      if(!recurrenceMatches(ev,key)) continue;
-      if((ev.exceptions||[]).includes(key)) continue;
-      const override=(ev.overrides||{})[key]||{};
-      out.push({...ev,...override,date:key,seriesId:ev.id,occurrenceDate:key,isRecurring:true,baseRecurrence:ev.recurrence});
-    }
-  });
-  return out.sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
-}
-function occurrencesOnDate(date){ return occurrencesBetween(date,date); }
-function personBusyOn(person,date){ return occurrencesOnDate(date).filter(e=>e.person===person||e.person==="both").map(e=>[mins(e.start),mins(e.end)]).sort((a,b)=>a[0]-b[0]); }
-function merged(intervals){ const out=[]; intervals.forEach(i=>{ if(!out.length||i[0]>out[out.length-1][1]) out.push([...i]); else out[out.length-1][1]=Math.max(out[out.length-1][1],i[1]); }); return out; }
 function combinedBusy(date){ return merged([...personBusyOn("rose",date),...personBusyOn("adrian",date)].sort((a,b)=>a[0]-b[0])); }
-function dayBounds(date){
-  const dt=parseLocalDate(date),weekend=[0,6].includes(dt.getDay()); let start=weekend?10*60:17*60,end=22*60;
-  if(date===todayKey()){ const now=new Date(),current=roundUp15(now.getHours()*60+now.getMinutes()+15); start=Math.max(start,current); }
+function dayBounds(date){ const dt=parseLocalDate(date),weekend=[0,6].includes(dt.getDay()); let start=weekend?10*60:17*60,end=22*60;
+  if(date===todayKey()){ const now=new Date(), current=roundUp15(now.getHours()*60+now.getMinutes()+15); start=Math.max(start,current); }
   return [start,end];
 }
 function freeWindows(date){
@@ -673,16 +418,7 @@ function smartWindowLabel(date,start,end){
   if(start<=boundStart) return `free until ${prettyTime(timeStr(end))}`;
   return `${prettyTime(timeStr(start))}–${prettyTime(timeStr(end))}`;
 }
-function repeatLabel(ev){
-  if(!ev.isRecurring&&!ev.recurrence) return "";
-  const r=ev.baseRecurrence||ev.recurrence;
-  if(!r) return "";
-  if(r.type==="daily") return "Repeats daily";
-  if(r.type==="weekdays") return "Repeats weekdays";
-  if(r.type==="weekly") return "Repeats weekly";
-  if(r.type==="custom") return "Repeats on selected days";
-  return "Repeating";
-}
+
 function closeEventMenus(){ document.querySelectorAll(".event-menu.open").forEach(m=>m.classList.remove("open")); }
 document.addEventListener("click",e=>{ if(!e.target.closest(".event-menu-wrap")) closeEventMenus(); });
 
@@ -691,46 +427,41 @@ function renderCalendar(){
   document.getElementById("calendarMonth").textContent=calendarCursor.toLocaleDateString(undefined,{month:"long",year:"numeric"});
   const grid=document.getElementById("calendarGrid"); grid.innerHTML="";
   const first=new Date(y,m,1),start=new Date(y,m,1-first.getDay());
-  const startKey=todayKey(start),endObj=new Date(start); endObj.setDate(start.getDate()+41); const endKey=todayKey(endObj);
-  const occs=occurrencesBetween(startKey,endKey),byDate={}; occs.forEach(o=>(byDate[o.date]||(byDate[o.date]=[])).push(o));
   for(let i=0;i<42;i++){
-    const d=new Date(start); d.setDate(start.getDate()+i); const key=todayKey(d),free=freeWindows(key),dayEvents=byDate[key]||[];
+    const d=new Date(start); d.setDate(start.getDate()+i); const key=todayKey(d),free=freeWindows(key);
     const cell=document.createElement("div");
     cell.className=`calendar-day ${d.getMonth()!==m?"muted-day":""} ${key===todayKey()?"today":""} ${free.length?"free-day":""}`;
     cell.innerHTML=`<div class="day-head"><span class="day-number">${d.getDate()}</span>${free.length&&d.getMonth()===m?'<span class="free-berry" title="You both have an open window">🍓</span>':""}</div>`;
-    dayEvents.slice(0,3).forEach(occ=>{
-      const chip=document.createElement("button"); chip.type="button"; chip.className=`event-chip ${occ.person}`;
-      chip.innerHTML=`${occ.isRecurring?'<span class="recur-mark">↻</span>':""}${prettyTime(occ.start)} `;
-      chip.append(document.createTextNode(occ.title)); chip.title=`Edit ${occ.title}`;
-      chip.addEventListener("click",e=>{ e.stopPropagation(); openEditOccurrence(occ); }); cell.appendChild(chip);
+    data.events.filter(e=>e.date===key).slice(0,3).forEach(ev=>{
+      const chip=document.createElement("button"); chip.type="button"; chip.className=`event-chip ${ev.person}`; chip.textContent=`${prettyTime(ev.start)} ${ev.title}`; chip.title=`Edit ${ev.title}`;
+      chip.addEventListener("click",e=>{ e.stopPropagation(); openEditEvent(ev.id); }); cell.appendChild(chip);
     });
-    if(dayEvents.length>3){ const more=document.createElement("div"); more.className="more-events"; more.textContent=`+${dayEvents.length-3} more`; cell.appendChild(more); }
     cell.addEventListener("click",()=>openAddEvent(key)); grid.appendChild(cell);
   }
   renderEventList(); renderHangoutSuggestions();
 }
 function renderEventList(){
   const wrap=document.getElementById("eventList"); wrap.innerHTML="";
-  const end=addDaysKey(todayKey(),60),upcoming=occurrencesBetween(todayKey(),end).slice(0,40);
+  const upcoming=data.events.filter(e=>e.date>=todayKey()).slice(0,30);
   if(!upcoming.length){ wrap.innerHTML='<div class="empty-state">Nothing on the calendar yet.</div>'; return; }
-  upcoming.forEach(occ=>{
-    const row=document.createElement("div"); row.className=`event-row ${occ.person}`;
+  upcoming.forEach(ev=>{
+    const row=document.createElement("div"); row.className=`event-row ${ev.person}`;
     row.innerHTML='<span class="event-dot"></span><div class="event-body"><div class="event-title"></div><div class="event-meta"></div></div><div class="event-menu-wrap"><button class="menu-btn" type="button" aria-label="Event options">⋯</button><div class="event-menu"><button class="menu-edit" type="button">Edit</button><button class="menu-delete" type="button">Delete</button></div></div>';
-    row.querySelector(".event-title").textContent=occ.title;
-    const recurring=repeatLabel(occ);
-    row.querySelector(".event-meta").textContent=`${fmtDate(occ.date,{weekday:"short",month:"short",day:"numeric"})} · ${prettyTime(occ.start)}–${prettyTime(occ.end)} · ${occ.person==="both"?"Both":occ.person[0].toUpperCase()+occ.person.slice(1)}${recurring?` · ${recurring}`:""}`;
-    row.querySelector(".event-body").addEventListener("click",()=>openEditOccurrence(occ));
+    row.querySelector(".event-title").textContent=ev.title;
+    row.querySelector(".event-meta").textContent=`${fmtDate(ev.date,{weekday:"short",month:"short",day:"numeric"})} · ${prettyTime(ev.start)}–${prettyTime(ev.end)} · ${ev.person==="both"?"Both":ev.person[0].toUpperCase()+ev.person.slice(1)}`;
+    row.querySelector(".event-body").addEventListener("click",()=>openEditEvent(ev.id));
     const menu=row.querySelector(".event-menu"),menuBtn=row.querySelector(".menu-btn");
     menuBtn.addEventListener("click",e=>{ e.stopPropagation(); const wasOpen=menu.classList.contains("open"); closeEventMenus(); if(!wasOpen) menu.classList.add("open"); });
-    row.querySelector(".menu-edit").addEventListener("click",()=>{ closeEventMenus(); openEditOccurrence(occ); });
-    row.querySelector(".menu-delete").addEventListener("click",()=>{ closeEventMenus(); openEditOccurrence(occ); setTimeout(()=>document.getElementById("deleteEventInModal").focus(),50); });
+    row.querySelector(".menu-edit").addEventListener("click",()=>{ closeEventMenus(); openEditEvent(ev.id); });
+    row.querySelector(".menu-delete").addEventListener("click",()=>{ closeEventMenus(); deleteEvent(ev.id); });
     wrap.appendChild(row);
   });
 }
 function renderHangoutSuggestions(){
   const wrap=document.getElementById("hangoutSuggestions"); wrap.innerHTML=""; const suggestions=[];
   for(let i=0;i<14;i++){
-    const key=addDaysKey(todayKey(),i),windows=freeWindows(key); windows.forEach(win=>suggestions.push({date:key,start:win[0],end:win[1]}));
+    const d=new Date(); d.setDate(d.getDate()+i); const key=todayKey(d),windows=freeWindows(key);
+    windows.forEach(win=>suggestions.push({date:key,start:win[0],end:win[1]}));
     if(suggestions.length>=7) break;
   }
   if(!suggestions.length){ wrap.innerHTML='<div class="empty-state">No 90-minute open windows found in the next two weeks.</div>'; document.getElementById("nextHangout").textContent="No obvious opening in the next two weeks."; return; }
@@ -760,28 +491,8 @@ function renderAll(){
   renderCalendar();
 }
 
-const syncDialog=document.getElementById("syncDialog");
-document.getElementById("syncStatusBtn").addEventListener("click",()=>{
-  document.getElementById("backendUrlInput").value=backendUrl;
-  document.getElementById("accessCodeInput").value=accessCode;
-  document.getElementById("disconnectSyncBtn").classList.toggle("hidden",!backendUrl);
-  setSyncStatus(bridgeReady?"connected":backendUrl?"error":"local",bridgeReady?"Shared ✓":backendUrl?"Sync offline":"Local only");
-  syncDialog.showModal();
-});
-document.getElementById("syncForm").addEventListener("submit",e=>{
-  e.preventDefault();
-  const url=document.getElementById("backendUrlInput").value.trim().replace(/\/$/,"");
-  const code=document.getElementById("accessCodeInput").value.trim();
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(url)){ alert("Paste the deployed Apps Script web app URL ending in /exec."); return; }
-  if(code.length<4){ alert("Enter the shared access code from the Better Together Settings sheet."); return; }
-  backendUrl=url; accessCode=code; localStorage.setItem(BACKEND_URL_KEY,backendUrl); localStorage.setItem(ACCESS_CODE_KEY,accessCode);
-  document.getElementById("disconnectSyncBtn").classList.remove("hidden"); syncDialog.close(); configureBridge();
-});
-document.getElementById("disconnectSyncBtn").addEventListener("click",()=>{
-  if(!confirm("Disconnect shared sync on this phone? Your current copy will stay on this phone.")) return;
-  backendUrl=""; accessCode=""; localStorage.removeItem(BACKEND_URL_KEY); localStorage.removeItem(ACCESS_CODE_KEY); teardownBridge();
-  if(syncPollTimer) clearInterval(syncPollTimer); syncPollTimer=null; syncDialog.close(); setSyncStatus("local","Local only");
+document.getElementById("resetDemoBtn").addEventListener("click",()=>{
+  if(confirm("Reset Better Together and erase everything saved in this browser?")){ data=clone(defaultData); localStorage.removeItem(STORAGE_KEY); activeDates={rose:todayKey(),adrian:todayKey()}; viewWeekOffset=0; renderAll(); }
 });
 
 renderAll();
-initSharedSync();
