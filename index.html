@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#F5CEC7" />
+  <title>Better Together</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand-wrap">
+        <div class="berry-mark" aria-hidden="true">🍓</div>
+        <div>
+          <p class="eyebrow">Rose + Adrian</p>
+          <h1>Better Together</h1>
+        </div>
+      </div>
+      <button class="ghost-btn" id="resetDemoBtn" title="Reset this browser's saved data">Reset data</button>
+    </header>
+
+    <nav class="tabs" aria-label="Main navigation">
+      <button class="tab active" data-page="dashboard">Home</button>
+      <button class="tab" data-page="rose">Rose</button>
+      <button class="tab" data-page="adrian">Adrian</button>
+      <button class="tab" data-page="calendar">Calendar</button>
+    </nav>
+
+    <main>
+      <section id="dashboard" class="page active">
+        <div class="week-switcher compact-panel">
+          <button class="ghost-btn compact" data-prev-week>← Previous week</button>
+          <div class="week-center">
+            <span class="soft-badge" id="weekStatusBadge">This week</span>
+            <strong id="weekLabel"></strong>
+          </div>
+          <button class="ghost-btn compact" data-this-week>This week</button>
+        </div>
+
+        <div class="score-grid">
+          <article class="score-card rose">
+            <div class="score-top">
+              <div>
+                <span class="person-chip">Rose</span>
+                <div class="score" id="roseScore">0%</div>
+              </div>
+              <div class="mini-berry">🍓</div>
+            </div>
+            <div class="progress"><span id="roseProgress"></span></div>
+            <p class="muted small" id="roseScoreNote">No check-ins yet this week.</p>
+            <button class="primary-btn small-btn" data-jump="rose">Check in for Rose</button>
+          </article>
+
+          <article class="score-card adrian">
+            <div class="score-top">
+              <div>
+                <span class="person-chip">Adrian</span>
+                <div class="score" id="adrianScore">0%</div>
+              </div>
+              <div class="mini-berry">🍓</div>
+            </div>
+            <div class="progress"><span id="adrianProgress"></span></div>
+            <p class="muted small" id="adrianScoreNote">Add Adrian’s goals when she’s ready.</p>
+            <button class="primary-btn small-btn peach" data-jump="adrian">Check in for Adrian</button>
+          </article>
+        </div>
+
+        <div class="two-col">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Today</p>
+                <h3>To-do lists</h3>
+              </div>
+              <span class="today-badge" id="todayLabel"></span>
+            </div>
+
+            <div class="todo-columns">
+              <div class="todo-person">
+                <div class="todo-title"><span>Rose</span><span class="todo-percent" id="roseTodoPercent">0%</span></div>
+                <form class="inline-form" id="roseTodoForm">
+                  <input id="roseTodoInput" type="text" placeholder="Add a task..." maxlength="120" />
+                  <button type="submit" class="icon-btn" aria-label="Add Rose task">+</button>
+                </form>
+                <div class="todo-list" id="roseTodoList"></div>
+              </div>
+
+              <div class="todo-person">
+                <div class="todo-title"><span>Adrian</span><span class="todo-percent" id="adrianTodoPercent">0%</span></div>
+                <form class="inline-form" id="adrianTodoForm">
+                  <input id="adrianTodoInput" type="text" placeholder="Add a task..." maxlength="120" />
+                  <button type="submit" class="icon-btn" aria-label="Add Adrian task">+</button>
+                </form>
+                <div class="todo-list" id="adrianTodoList"></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Mood check</p>
+                <h3>How are we feeling?</h3>
+              </div>
+            </div>
+            <div class="mood-block">
+              <p class="mini-label">Rose</p>
+              <div class="mood-row" id="roseMood"></div>
+            </div>
+            <div class="mood-block">
+              <p class="mini-label">Adrian</p>
+              <div class="mood-row" id="adrianMood"></div>
+            </div>
+            <p class="muted small">Choose a level and the strawberries fill up to it.</p>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Calendar</p>
+              <h3>When can we hang out?</h3>
+            </div>
+            <button class="ghost-btn compact" data-jump="calendar">Open calendar</button>
+          </div>
+          <div class="hangout-box">
+            <div>
+              <span class="soft-badge">Next open overlap</span>
+              <h4 id="nextHangout">Add your plans and I’ll find an opening.</h4>
+            </div>
+            <p class="muted small">Based on the events you both add to the calendar.</p>
+          </div>
+        </article>
+      </section>
+
+      <section id="rose" class="page">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Rose</p>
+            <h2>Your week</h2>
+          </div>
+          <div class="big-score rose" id="rosePageScore">0%</div>
+        </div>
+
+        <div class="person-layout">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Daily check-in</p>
+                <h3 id="roseCheckinDate"></h3>
+              </div>
+              <div class="date-controls">
+                <span class="today-badge date-today" id="roseDateBadge">TODAY</span>
+                <input type="date" id="roseDatePicker" class="date-input">
+              </div>
+            </div>
+            <div id="roseCheckin" class="checkin-grid"></div>
+          </article>
+
+          <div class="side-stack">
+            <article class="panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">Mood</p><h3 id="roseMoodHeading">Today</h3></div>
+              </div>
+              <div class="mood-row large" id="roseMoodPage"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">To-do list</p><h3 id="roseTodoPageHeading">Today</h3></div>
+                <span class="todo-percent" id="roseTodoPagePercent">0%</span>
+              </div>
+              <form class="inline-form person-todo-form" data-person="rose">
+                <input class="person-todo-input" type="text" placeholder="Add a task..." maxlength="120" />
+                <button type="submit" class="icon-btn" aria-label="Add Rose task">+</button>
+              </form>
+              <div class="todo-list" id="roseTodoPageList"></div>
+            </article>
+          </div>
+        </div>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">Progress</p><h3>Weekly goals</h3></div>
+            <div class="week-mini-controls">
+              <button class="ghost-btn compact" data-prev-week>← Previous</button>
+              <span class="soft-badge" id="roseGoalWeekLabel"></span>
+              <button class="ghost-btn compact" data-this-week>This week</button>
+            </div>
+          </div>
+          <div id="roseGoalsOverview" class="goal-overview"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">Goal setup</p><h3>Rose’s goals</h3></div>
+            <span class="muted small">Drag to reorder</span>
+          </div>
+          <div id="roseGoalManager"></div>
+          <button class="primary-btn small-btn" data-add-goal="rose">+ Add goal</button>
+        </article>
+      </section>
+
+      <section id="adrian" class="page">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Adrian</p>
+            <h2>Your week</h2>
+          </div>
+          <div class="big-score adrian" id="adrianPageScore">0%</div>
+        </div>
+
+        <div class="person-layout">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Daily check-in</p>
+                <h3 id="adrianCheckinDate"></h3>
+              </div>
+              <div class="date-controls">
+                <span class="today-badge date-today" id="adrianDateBadge">TODAY</span>
+                <input type="date" id="adrianDatePicker" class="date-input">
+              </div>
+            </div>
+            <div id="adrianCheckin" class="checkin-grid"></div>
+          </article>
+
+          <div class="side-stack">
+            <article class="panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">Mood</p><h3 id="adrianMoodHeading">Today</h3></div>
+              </div>
+              <div class="mood-row large" id="adrianMoodPage"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">To-do list</p><h3 id="adrianTodoPageHeading">Today</h3></div>
+                <span class="todo-percent" id="adrianTodoPagePercent">0%</span>
+              </div>
+              <form class="inline-form person-todo-form" data-person="adrian">
+                <input class="person-todo-input" type="text" placeholder="Add a task..." maxlength="120" />
+                <button type="submit" class="icon-btn" aria-label="Add Adrian task">+</button>
+              </form>
+              <div class="todo-list" id="adrianTodoPageList"></div>
+            </article>
+          </div>
+        </div>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">Progress</p><h3>Weekly goals</h3></div>
+            <div class="week-mini-controls">
+              <button class="ghost-btn compact" data-prev-week>← Previous</button>
+              <span class="soft-badge" id="adrianGoalWeekLabel"></span>
+              <button class="ghost-btn compact" data-this-week>This week</button>
+            </div>
+          </div>
+          <div id="adrianGoalsOverview" class="goal-overview"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">Goal setup</p><h3>Adrian’s goals</h3></div>
+            <span class="muted small">Drag to reorder</span>
+          </div>
+          <div id="adrianGoalManager"></div>
+          <button class="primary-btn small-btn peach" data-add-goal="adrian">+ Add goal</button>
+        </article>
+      </section>
+
+      <section id="calendar" class="page">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Shared calendar</p>
+            <h2>Make room for each other.</h2>
+          </div>
+          <button class="primary-btn" id="addEventBtn">+ Add something</button>
+        </div>
+
+        <div class="calendar-layout">
+          <article class="panel calendar-panel">
+            <div class="calendar-toolbar">
+              <button class="icon-btn subtle" id="prevMonth" aria-label="Previous month">←</button>
+              <h3 id="calendarMonth"></h3>
+              <button class="icon-btn subtle" id="nextMonth" aria-label="Next month">→</button>
+            </div>
+            <div class="calendar-legend">
+              <span><i class="legend-dot rose-dot"></i>Rose</span>
+              <span><i class="legend-dot adrian-dot"></i>Adrian</span>
+              <span><i class="legend-dot both-dot"></i>Both</span>
+              <span>🍓 good hangout window</span>
+            </div>
+            <div class="weekdays">
+              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </article>
+
+          <aside class="panel">
+            <div class="panel-head">
+              <div><p class="eyebrow">Hangout finder</p><h3>Open time</h3></div>
+            </div>
+            <p class="muted small">Looks at the next 14 days and finds 90+ minute windows when neither of you is busy.</p>
+            <div id="hangoutSuggestions" class="suggestion-list"></div>
+          </aside>
+        </div>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">Coming up</p><h3>Plans</h3></div>
+            <span class="muted small">Click a plan to edit it.</span>
+          </div>
+          <div id="eventList" class="event-list"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="goalDialog" class="modal">
+    <form method="dialog" class="modal-card" id="goalForm">
+      <div class="modal-head">
+        <div><p class="eyebrow">New goal</p><h3 id="goalDialogTitle">Add goal</h3></div>
+        <button type="button" class="icon-btn subtle" data-close="goalDialog">×</button>
+      </div>
+      <input type="hidden" id="goalPerson">
+      <label>Goal name<input id="goalName" required maxlength="80" placeholder="Example: Read 4 days per week"></label>
+      <label>Tracking method
+        <select id="goalType" required>
+          <option value="daily_checkbox">Daily checkbox</option>
+          <option value="days_per_week">Certain number of days per week</option>
+          <option value="max_weekly">Maximum weekly amount</option>
+          <option value="min_weekly">Minimum weekly amount</option>
+          <option value="daily_percentage">Daily percentage</option>
+        </select>
+      </label>
+      <label>Target
+        <input id="goalTarget" type="number" min="0" step="0.01" required>
+        <span class="field-hint" id="targetHint"></span>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="ghost-btn" data-close="goalDialog">Cancel</button>
+        <button type="submit" class="primary-btn">Save goal</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="eventDialog" class="modal">
+    <form method="dialog" class="modal-card" id="eventForm">
+      <div class="modal-head">
+        <div><p class="eyebrow">Calendar</p><h3 id="eventDialogTitle">Add something</h3></div>
+        <button type="button" class="icon-btn subtle" data-close="eventDialog">×</button>
+      </div>
+      <input type="hidden" id="eventId">
+      <label>What is it?<input id="eventTitle" required maxlength="90" placeholder="Work, dinner, appointment..."></label>
+      <label>Who?
+        <select id="eventPerson" required>
+          <option value="rose">Rose</option>
+          <option value="adrian">Adrian</option>
+          <option value="both">Both</option>
+        </select>
+      </label>
+      <div class="form-row">
+        <label>Date<input id="eventDate" type="date" required></label>
+        <label>Start<input id="eventStart" type="time" required></label>
+        <label>End<input id="eventEnd" type="time" required></label>
+      </div>
+      <div class="modal-actions split-actions">
+        <button type="button" class="danger-btn hidden" id="deleteEventInModal">Delete</button>
+        <div class="right-actions">
+          <button type="button" class="ghost-btn" data-close="eventDialog">Cancel</button>
+          <button type="submit" class="primary-btn" id="eventSubmitBtn">Add to calendar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
