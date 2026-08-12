@@ -1,68 +1,118 @@
-# Better Together — Shared Sync Setup
+# Better Together — Same GitHub Site, Shared Data
 
-This version keeps the website on the same URL you already use, but adds a Google Sheets + Apps Script shared backend. Keeping the same website URL is important because your current phone data lives in that site's browser storage.
+This version keeps the Better Together website you already have on GitHub Pages.
 
-## Do this in this order
+**The design is not being rebuilt.** `index.html`, `styles.css`, and the `assets` folder are the same as the v3.1 site. The GitHub change is the replacement `app.js`, which swaps the unreliable iframe bridge for a direct JSONP connection to Apps Script.
 
-### 1. Update the Better Together website files
-Replace the old site files with the files in the root of this package (`index.html`, `styles.css`, `app.js`, and the `assets` folder). If you use GitHub Pages, update the same repository/site rather than creating a brand-new URL.
+The shared backend is a separate Google Apps Script project containing `apps-script/Code.gs`.
 
-Do **not** clear Safari/site data.
+## 1. Update the existing GitHub repo
 
-### 2. Create the shared backend
-1. Go to Google Apps Script and create a new standalone project named **Better Together Sync**.
-2. Replace the default `Code.gs` with the included `apps-script/Code.gs`.
-3. Add a new HTML file named **Bridge** and paste in `apps-script/Bridge.html`.
-4. Optional: in Project Settings, enable viewing `appsscript.json` and replace it with the included manifest.
-5. Select the function `setupBetterTogether` and click **Run**.
-6. Approve Google's permission prompt.
+In the same Better Together repository you already use:
 
-That function creates a Google Sheet called **Better Together Data**. Open it and look at the **Settings** tab. Copy the shared access code.
+1. Replace **only `app.js`** with the `app.js` in this package.
+2. Leave `index.html`, `styles.css`, and `assets/` where they already are.
+3. Commit/push the change and let GitHub Pages redeploy.
 
-### 3. Deploy the backend
-1. In Apps Script choose **Deploy → New deployment**.
-2. Choose **Web app**.
-3. Set **Execute as** to **Me**.
-4. Set **Who has access** to **Anyone**.
-5. Deploy and copy the Web App URL ending in `/exec`.
+The URL stays exactly the same.
 
-### 4. Connect Rose's phone FIRST
-Open the updated Better Together app on Rose's phone. Tap **Local only** in the top-right.
+This build intentionally starts the shared connection fresh. It does **not** import the old browser-only data or the old failed sync queue.
 
-Paste:
-- the Apps Script `/exec` URL
-- the shared access code from the Settings sheet
+## 2. Create a fresh Apps Script backend
 
-Tap **Connect & sync** and wait until the top-right says **Shared ✓**.
+1. Go to Google Apps Script and create a **new standalone project** named something like `Better Together Shared`.
+2. Replace the default `Code.gs` with `apps-script/Code.gs` from this package.
+3. Save.
+4. Select the function **`setupBetterTogether`** and click **Run**.
+5. Approve Google's permission request.
 
-The first connected phone becomes the starting shared copy, so doing Rose's phone first gives the app the best chance of preserving the calendar, check-ins, goals, moods, and to-dos already saved there.
+That creates a Google Sheet named **Better Together Data**.
 
-### 5. Connect Adrian's phone
-Open Better Together on Adrian's phone and connect using the exact same backend URL and access code. If Adrian already used her local copy, unique to-dos, check-ins, events, and custom goals from her phone are merged into the shared copy on that device's first connection.
+Open the sheet and go to the **Settings** tab. It contains the shared access code.
 
-After that, both phones read and write the same shared data. The app also refreshes while it is open and whenever you return to it.
+## 3. Deploy Apps Script
+
+In Apps Script:
+
+1. **Deploy → New deployment**
+2. Choose **Web app**
+3. **Execute as:** Me
+4. **Who has access:** Anyone
+5. Deploy
+6. Copy the URL ending in `/exec`
+
+Opening that URL directly should show:
+
+**Better Together sync is running 🍓**
+
+## 4. Connect Rose's copy
+
+After the GitHub Pages update is live:
+
+1. Open your existing Better Together site/app.
+2. Tap the sync pill in the upper-right. It should say **Local only** on the first load of this version.
+3. Paste the new Apps Script `/exec` URL.
+4. Enter the access code from the Settings sheet.
+5. Tap **Connect & sync**.
+6. Wait for the pill to say **Shared ✓**.
+
+When it connects, the new shared copy replaces the old browser-only data on the screen. Rose's default goals are already in the fresh shared copy; the rest can be re-entered.
+
+## 5. Connect Adrian
+
+On Adrian's phone:
+
+1. Open the **same GitHub Pages URL**.
+2. Tap **Local only**.
+3. Enter the **same `/exec` URL** and **same access code**.
+4. Tap **Connect & sync**.
+
+Both phones now read and write the same shared state.
+
+The app checks for changes about every 15 seconds while open and also refreshes when you return to it.
+
+## 6. Quick two-phone test
+
+1. On Rose's phone, add a calendar event called `SYNC TEST` for tomorrow.
+2. Wait a few seconds or bring Adrian's app back into focus.
+3. Adrian should see `SYNC TEST`.
+4. Adrian deletes it.
+5. Rose should see it disappear after the next refresh.
+
+If that works, goals, check-ins, moods, to-dos, and calendar events are all using the shared copy.
 
 ## Repeating calendar items
-When adding a calendar item, use **Repeats**. Options included are:
+
+The existing calendar UI is unchanged and still supports:
+
 - Does not repeat
 - Every day
-- Every weekday (Mon–Fri)
+- **Every weekday (Mon–Fri)**
 - Every week
 - Custom days each week
+- Optional repeat-until date
+- Edit/delete one occurrence or the whole series
 
-Example: for work every weekday, set the date you want the schedule to begin, choose **9:00 AM–5:00 PM**, and set **Repeats → Every weekday (Mon–Fri)**. You can optionally set a repeat-until date.
+Example:
 
-When editing a repeating event, you can apply the edit to **this occurrence only** or **the entire repeating series**. Deleting also respects that choice.
+**Work → Rose → 9:00 AM–5:00 PM → Every weekday (Mon–Fri)**
 
-## Sync behavior
-- Changes save to the phone immediately.
-- When connected, changes are queued and sent to the shared backend.
-- If the phone temporarily loses internet, the app keeps the changes locally and syncs them when it reconnects.
-- The top-right badge tells you whether you are shared, syncing, waiting, or local-only.
+The Hangout Finder includes repeating events when deciding when you are both free.
 
-## Changing the access code later
-In Apps Script, run:
+## Important difference from the older sync build
 
-`setAccessCode('NEW-CODE-HERE')`
+There is no `Bridge.html` and no hidden iframe anymore.
 
-Then reconnect both phones with the new code.
+The GitHub front end calls Apps Script through a small JSONP API served by `doGet`. The backend uses a lock and applies each individual change to the shared state, so Rose and Adrian can make separate updates without replacing the entire database with whichever phone saved last.
+
+## If the installed phone app appears to be using old JavaScript
+
+You should not need to change the site URL or rebuild the home-screen shortcut. Fully close Better Together and reopen it after GitHub Pages deploys. If needed, open the same site once in Safari/Chrome and refresh it, then reopen the home-screen app.
+
+## Intentional reset later
+
+If you ever want to wipe the shared tracker and start fresh again, run this manually in Apps Script:
+
+`resetBetterTogetherData()`
+
+That resets the shared state to Rose's original goals and an empty Adrian/calendar/to-do history.

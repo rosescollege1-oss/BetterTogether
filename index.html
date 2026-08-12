@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#F5CEC7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Better Together" />
   <title>Better Together</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +23,10 @@
           <h1>Better Together</h1>
         </div>
       </div>
-      <button class="ghost-btn" id="resetDemoBtn" title="Reset this browser's saved data">Reset data</button>
+      <button class="sync-pill local" id="syncStatusBtn" type="button" title="Shared sync settings">
+        <span class="sync-dot"></span>
+        <span id="syncStatusText">Local only</span>
+      </button>
     </header>
 
     <nav class="tabs" aria-label="Main navigation">
@@ -356,6 +362,7 @@
         <button type="button" class="icon-btn subtle" data-close="eventDialog">×</button>
       </div>
       <input type="hidden" id="eventId">
+      <input type="hidden" id="eventOccurrenceDate">
       <label>What is it?<input id="eventTitle" required maxlength="90" placeholder="Work, dinner, appointment..."></label>
       <label>Who?
         <select id="eventPerson" required>
@@ -369,11 +376,73 @@
         <label>Start<input id="eventStart" type="time" required></label>
         <label>End<input id="eventEnd" type="time" required></label>
       </div>
+
+      <div id="eventRecurrenceFields">
+        <label>Repeats
+          <select id="eventRepeat">
+            <option value="none">Does not repeat</option>
+            <option value="daily">Every day</option>
+            <option value="weekdays">Every weekday (Mon–Fri)</option>
+            <option value="weekly">Every week</option>
+            <option value="custom">Custom days each week</option>
+          </select>
+        </label>
+        <div class="repeat-extra hidden" id="repeatExtra">
+          <div class="custom-days hidden" id="customDays" aria-label="Repeat on these days">
+            <label><input type="checkbox" value="0">S</label>
+            <label><input type="checkbox" value="1">M</label>
+            <label><input type="checkbox" value="2">T</label>
+            <label><input type="checkbox" value="3">W</label>
+            <label><input type="checkbox" value="4">T</label>
+            <label><input type="checkbox" value="5">F</label>
+            <label><input type="checkbox" value="6">S</label>
+          </div>
+          <label>Repeat until <span class="optional-label">optional</span>
+            <input id="eventRepeatUntil" type="date">
+            <span class="field-hint">Leave blank to keep repeating.</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="eventEditScopeWrap" class="scope-card hidden">
+        <label>Apply changes to
+          <select id="eventEditScope">
+            <option value="occurrence">This occurrence only</option>
+            <option value="series">The entire repeating series</option>
+          </select>
+        </label>
+        <p class="muted small" id="eventScopeHint">Changing just one occurrence keeps the rest of the series untouched.</p>
+      </div>
+
       <div class="modal-actions split-actions">
         <button type="button" class="danger-btn hidden" id="deleteEventInModal">Delete</button>
         <div class="right-actions">
           <button type="button" class="ghost-btn" data-close="eventDialog">Cancel</button>
           <button type="submit" class="primary-btn" id="eventSubmitBtn">Add to calendar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="syncDialog" class="modal">
+    <form method="dialog" class="modal-card" id="syncForm">
+      <div class="modal-head">
+        <div><p class="eyebrow">Shared sync</p><h3>Connect Better Together</h3></div>
+        <button type="button" class="icon-btn subtle" data-close="syncDialog">×</button>
+      </div>
+      <p class="muted small">Connect both phones to the same Apps Script backend. Your existing data on this phone will be carried into the shared copy the first time you connect.</p>
+      <label>Apps Script web app URL
+        <input id="backendUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" required>
+      </label>
+      <label>Shared access code
+        <input id="accessCodeInput" type="password" inputmode="text" autocomplete="off" placeholder="Shared access code" required>
+      </label>
+      <div class="sync-detail" id="syncDetail">Not connected yet.</div>
+      <div class="modal-actions split-actions">
+        <button type="button" class="danger-btn hidden" id="disconnectSyncBtn">Disconnect this phone</button>
+        <div class="right-actions">
+          <button type="button" class="ghost-btn" data-close="syncDialog">Cancel</button>
+          <button type="submit" class="primary-btn" id="connectSyncBtn">Connect & sync</button>
         </div>
       </div>
     </form>
