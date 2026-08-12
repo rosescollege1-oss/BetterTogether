@@ -243,3 +243,43 @@ input:focus,select:focus{border-color:var(--rose);box-shadow:0 0 0 3px rgba(231,
   .sync-pill{padding:8px 10px}.sync-pill span:last-child{max-width:85px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .custom-days{gap:4px}.custom-days label{padding:8px 0}
 }
+/* Keep every calendar square the same height */
+.calendar-grid {
+  grid-auto-rows: 108px;
+}
+
+.calendar-day {
+  min-height: 0;
+  height: 108px;
+  overflow: hidden;
+}
+
+/* Allow event names to wrap instead of stretching the calendar */
+.event-chip {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.15;
+  height: auto;
+  max-height: 2.5em;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+/* Keep calendar squares equal on phones too */
+@media (max-width: 650px) {
+  .calendar-grid {
+    grid-auto-rows: 78px;
+  }
+
+  .calendar-day {
+    height: 78px;
+    min-height: 0;
+  }
+
+  .event-chip {
+    white-space: normal;
+    line-height: 1.1;
+    max-height: 2.3em;
+  }
+}
