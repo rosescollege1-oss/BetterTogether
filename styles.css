@@ -261,7 +261,7 @@ input:focus,select:focus{border-color:var(--rose);box-shadow:0 0 0 3px rgba(231,
   word-break: break-word;
   line-height: 1.15;
   height: auto;
-  max-height: 2.5em;
+  max-height: 3em;
   overflow: hidden;
   text-overflow: clip;
 }
@@ -280,6 +280,6 @@ input:focus,select:focus{border-color:var(--rose);box-shadow:0 0 0 3px rgba(231,
   .event-chip {
     white-space: normal;
     line-height: 1.1;
-    max-height: 2.3em;
+    max-height: 3em;
   }
 }
