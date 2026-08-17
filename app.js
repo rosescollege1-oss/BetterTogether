@@ -228,15 +228,37 @@ async function flushPendingMutations(){
   if(syncBusy||!bridgeReady||!pendingMutations.length) return;
   syncBusy=true; setSyncStatus("syncing","Syncing…");
   try{
+    // Send queued edits one at a time, but DO NOT replace the screen with the
+    // server's state after every single edit. That was the source of the
+    // "tweaking"/disappearing behavior when another edit happened mid-sync.
     while(pendingMutations.length){
       const mut=pendingMutations[0];
-      const result=await bridgeCall("applyMutation",[mut,clientId]);
-      pendingMutations.shift(); savePending();
-      if(result?.state){ data=normalizeSharedState(result.state); persistLocal(); }
+      await bridgeCall("applyMutation",[mut,clientId]);
+      pendingMutations.shift();
+      savePending();
     }
-    lastSyncAt=new Date(); renderAll(); setSyncStatus("connected","Shared ✓");
-  }catch(err){ showSyncError(err); }
-  finally{ syncBusy=false; }
+
+    // Once every queued local change has reached the shared copy, pull one
+    // clean snapshot. If the user makes another edit while this request is in
+    // flight, keep the optimistic local screen and sync that new edit first.
+    const result=await bridgeCall("getState",[-1]);
+    if(!pendingMutations.length && result?.state){
+      data=normalizeSharedState(result.state);
+      persistLocal();
+    }
+
+    lastSyncAt=new Date();
+    renderAll();
+    setSyncStatus("connected",pendingMutations.length?"Sync pending":"Shared ✓");
+  }catch(err){
+    showSyncError(err);
+  }finally{
+    syncBusy=false;
+    // A new edit may have been queued during the final pull.
+    if(pendingMutations.length&&bridgeReady&&!lastSyncError){
+      setTimeout(flushPendingMutations,0);
+    }
+  }
 }
 async function pullSharedState(){
   if(syncBusy||!bridgeReady||pendingMutations.length) return;
@@ -244,10 +266,20 @@ async function pullSharedState(){
   try{
     const rev=Number(data.meta?.revision||0);
     const result=await bridgeCall("getState",[rev]);
+
+    // If the user changed something while this pull was in flight, never let
+    // the older server snapshot overwrite that newer local edit.
+    if(pendingMutations.length) return;
+
     if(result?.state) adoptSharedState(result.state);
     else { lastSyncAt=new Date(); setSyncStatus("connected","Shared ✓"); }
   }catch(err){ bridgeReady=false; showSyncError(err); }
-  finally{ syncBusy=false; }
+  finally{
+    syncBusy=false;
+    if(pendingMutations.length&&bridgeReady&&!lastSyncError){
+      setTimeout(flushPendingMutations,0);
+    }
+  }
 }
 function startSyncPolling(){
   if(syncPollTimer) clearInterval(syncPollTimer);
